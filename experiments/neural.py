@@ -90,8 +90,24 @@ def least_sq_ntwk1(features, labels, initial_wts, **kwargs):
     # get optimal wts1 given wts0
     wts1 = np.linalg.pinv(hidden).dot(labels)
     # backprop
+    """
+    As of 2014-11-11 something isn't right here. Algorithm isn't converging.
+    Sample output on nonlinear function using random features:
+    error after iteration 1: 0.389115314723
+    error after iteration 2: 0.324511537066
+    error after iteration 3: 0.728566874908
+    error after iteration 4: 0.174713101869
+    error after iteration 5: 0.47208655752
+    error after iteration 6: 0.779610384956
+    ...
+    error after iteration 60: 1.26413065775
+    error after iteration 61: 1.26394322385
+    error after iteration 62: 1.26373950808
+    error after iteration 63: 1.26351975815
+    error after iteration 64: 1.26328420549
+    """
     for i in range(maxiter):
-        wts0 -= eta * sigmoid_grad(wts0) * wts1[1:, :].transpose()
+        wts0 -= eta * sigmoid_grad(wts0) * wts1[1:]
         hidden[:, 1:] = sigmoid(features.dot(wts0))
         wts1 = np.linalg.pinv(hidden).dot(labels)
         predicted = least_sq_predict(features, wts0, wts1, hidden=hidden)
