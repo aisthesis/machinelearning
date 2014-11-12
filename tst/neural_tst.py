@@ -75,5 +75,22 @@ class TestNeural(unittest.TestCase):
                     self.assertAlmostEqual(siggradx[i, j], expected[i, j], places=5)
 
 
+def nonlinear_func1(features):
+    """ 0.5 * x0 + 0.1 * x1 * x2 - 3.4 * x2**2 + 2.3 * x3**3 """
+    labels = 0.5 * features[:, 0]
+    labels += 0.1 * features[:, 1] * features[:, 2]
+    labels -= 3.4 * features[:, 2] * features[:, 2]
+    labels += 2.3 * features[:, 3] * features[:, 3] * features[:, 3]
+    return labels
+
+
+def try_leastsqneural():
+    features = np.random.random((21, 4))
+    features[:, 0] = 1
+    labels = nonlinear_func1(features)
+    initial_wts = np.random.random((4, 6))
+    wts0, wts1 = neural.least_sq_ntwk1(features, labels, initial_wts, maxiter=8)
+
 if __name__ == '__main__':
     unittest.main()
+
