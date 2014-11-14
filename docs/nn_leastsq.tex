@@ -1,0 +1,103 @@
+\documentclass[11pt, oneside]{article}   	% use "amsart" instead of "article" for AMSLaTeX format
+\usepackage{geometry}                		% See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   		% ... or a4paper or a5paper or ... 
+%\geometry{landscape}                		% Activate for for rotated page geometry
+\usepackage[parfill]{parskip}    		% Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}				% Use pdf, png, jpg, or eps§ with pdflatex; use eps in DVI mode
+								% TeX will automatically convert eps --> pdf in pdflatex		
+\usepackage{amssymb}
+\usepackage{amsmath}
+
+\title{Neural Network to Minimize Average Squared Error}
+\author{Marshall Farrier}
+\date{November 12, 2014}							% Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+\section{Problem}
+Create a neural network that outputs real values not restricted to the interval $[0, 1)$. Mean squared error should be the error measure, as it is obviously a hack just to expand the unit interval out to cover a wider range of real values.
+
+\section{Solution Idea}
+The idea is to use the normal equation to get the least-squared-error linear mapping from the last hidden layer to the prediction. Then use back propagation taking that matrix as a given. Since moving an appropriate amount in a direction determined by the matrix of partial derivatives (of weights with respect to error measure) will improve the error \textit{given} the linear transformation at the end. So we should get double improvement, and hopefully fewer calculations for improved performance, on each step when on each iteration we use back propagation \textit{given} the final linear transformation from the normal equation of the prior iteration, then calculate the new normal equation.
+
+\section{Implementation}
+
+First to work out the derivation on the simplest case, where we map each set of features to a single real value.
+
+\subsection{3-layer Neural Network (1 hidden layer)}
+
+The first problem is to calculate all the partial derivatives with respect to a weight matrix $\textbf{w}$ with a neural network that processes feature matrix $\textbf{X}$ in the following way:
+
+\begin{equation}
+\textbf{X} \rightarrow \textbf{X} \cdot \textbf{w} \rightarrow f(\textbf{X} \cdot \textbf{w}) 
+\rightarrow f(\textbf{X} \cdot \textbf{w}) \cdot \textbf{v} \approx \textbf{y}
+\end{equation}
+
+where $\textbf{X}$ is the matrix of features (including the constant feature) with 1 data point in each row; $\textbf{w}$ is a matrix of weights by which $\textbf{X}$ is multiplied before a nonlinear function $f$  is applied element-wise to $\textbf{X} \cdot \textbf{w}$ in order to create the non-constant features in the hidden layer. $f$ is what gives us the nonlinear distortion needed to approximate a nonlinear target function. Presumably we will want $f$ to be something like the sigmoid function or $tanh$. They also have a fairly tight spread, which may or may not be a desirable quality. $\textbf{v}$ is the vector (because we are only allowing 1 label per row) representing the mapping of the hidden layer to the output. For purposes of back propagation, the idea is to treat $\textbf{v}$ as a constant. Also, for $\textbf{v}$ in this context, we drop the first term, because the constant feature of the hidden layer doesn't vary with $\textbf{w}$.
+
+The goal is to choose values of $\textbf{w}$ that minimize error where the error function is defined as:
+\begin{equation}
+z = \frac{1}{n}  \parallel f(\textbf{X} \cdot \textbf{w}) \cdot \textbf{v} - \textbf{y} \parallel ^2
+\end{equation}
+$n$ is the number of rows in the dataset, and $z$ is shorthand for the mean of the squared difference between predicted and actual label over the input data. We're looking for the partial derivatives over $z$ with respect to each $w_{j,k}$ in the matrix
+$\textbf{w}$.
+
+\subsubsection{Unrolling the Matrices}
+
+In detail, here is what we're trying to minimize:
+
+\begin{equation}
+z = \frac{1}{n} \sum\limits_{i = 1}^n ((\sum\limits_{k = 1}^p f(\sum\limits_{j = 0}^m x_{i,j} \cdot w_{j,k}) \cdot v_k) - y_i)^2
+\end{equation}
+
+The inconsistency in numbering between the rows (starting with 0) and columns (starting with 1) of $\textbf{w}$
+is because the $0th$ row is the factor applied to the constant components of $\textbf{x}$. I start the column numbering at 1, however, because the $\textit{1st}$ column provides the coefficients for deriving the $\textit{1st}$ hidden feature, leaving room for the constant $0th$ hidden feature, for which we don't have to worry about derivatives with respect to $\textbf{w}$ because the constant hidden feature doesn't change regardless of how we vary $\textbf{w}$. The $i$ index starts with 1 because it corresponds to rows in our data set, of there are $n$ and not $n+1$.
+
+\subsubsection{Partial Derivatives}
+
+We now need to find the matrix of partial derivatives $\dfrac{\displaystyle\partial{z}}{\displaystyle\partial{w_{a,b}}}$. Differentiating the above equation with respect to $w_{a,b}$ we get:
+\begin{align}
+\dfrac{\displaystyle\partial{z}}{\displaystyle\partial{w_{a,b}}} &= \frac{2}{n} \sum\limits_{i = 1}^n (f(\sum_{j = 0}^m x_{i,j} \cdot w_{j,b}) \cdot v_b - y_i) \cdot (x_{i,a} \cdot v_b \cdot f'(\sum_{j=0}^m x_{i,j} \cdot w_{j,b})) \\
+&= \frac{2 v_b}{n}  \sum\limits_{i = 1}^n x_{i,a} \cdot f'(\sum_{j=0}^m x_{i,j} \cdot w_{j,b}) \cdot (v_b \cdot f(\sum_{j = 0}^m x_{i,j} \cdot w_{j,b})  - y_i)
+\end{align}
+Note that index $k$ occurs outside of the function $f$, so we can ignore that sum in the partial derivatives with respect to the elements of column $k$ of $\textbf{w}$. But we can't get rid of index $j$ because that sum occurs inside the function $f$.
+
+\subsubsection{Choosing a specific $f$}
+
+The function $f$ can in principle be anything, but we'll certainly want it to be nonlinear because it is what is going to allow us to approximate nonlinear target functions, and it has to be differentiable to allow regression. It's certainly worth exploring what functions might be generally optimal or more suited to particular types of learning problems. But to begin with, I'll work through the math using the sigmoid function:
+\begin{equation}
+ S(t) = \dfrac{1}{1 + e^{-t}}
+ \end{equation}
+ It seems intuitively like it should be a good choice, but other choices, including unbounded functions, are certainly also worth exploring.
+ 
+ As its derivative we have: 
+  \begin{align}
+ S'(t) &= \dfrac{e^{-t}}{(1 + e^{-t})^2} \\
+ &= \dfrac{1}{1 + e^{-t}} \cdot \dfrac{e^{-t}}{1 + e^{-t}} \\
+ &= \dfrac{1}{1 + e^{-t}} \cdot (1 - \dfrac{1}{1 + e^{-t}}) \\
+ &= S(t) \cdot (1 - S(t))
+ \end{align}
+ 
+ Before plugging $S(t)$ and $S'(t)$ into our equation for $\dfrac{\displaystyle\partial{z}}{\displaystyle\partial{w_{a,b}}}$, I'm going to introduce a new variable $t_{i,b}$ to simplify our notation for the repeated term used as argument for $f$:
+ \begin{equation}
+ t_{i, b} = \sum_{j=0}^m x_{i,j} \cdot w_{j,b}
+ \end{equation}
+ $t_{i,b}$ is actually just the $b-th$ hidden feature for the $i-th$ row of training data. So, regardless how we choose $f$, this sum has already been saved and won't have to be recalculated. Now, replacing the sum with our new variable $t_{i,b}$ and setting $f$ and $f'$ to $S$ and $S'$ respectively, we get:
+  \begin{align}
+ \dfrac{\displaystyle\partial{z}}{\displaystyle\partial{w_{a,b}}} 
+&= \frac{2 v_b}{n}  \sum\limits_{i = 1}^n x_{i,a} \cdot S'(t_{i,b}) \cdot (v_b \cdot S(t_{i,b})  - y_i) \\
+&= \frac{2 v_b}{n}  \sum\limits_{i = 1}^n x_{i,a} \cdot S(t_{i, b}) \cdot (1 - S(t_{i,b}))\cdot (v_b \cdot S(t_{i,b})  - y_i)
+ \end{align}
+ 
+ To simplify as much as possible for a vectorized solution, we can introduce the matrix $\textbf{T} = S(\textbf{X} \cdot \textbf{w})$. $\textbf{T}$ is the matrix of coefficients $t_{j,k}$ and is identical to the hidden layer without the constant feature:
+ \begin{equation}
+ \dfrac{\displaystyle\partial{z}}{\displaystyle\partial{\textbf{w}}} = \frac{2}{n} \cdot \textbf{X}^\intercal \cdot (\textbf{T} \odot (1 - \textbf{T}) \odot ((\textbf{T} \cdot \textbf{v} - \textbf{y})  \cdot \textbf{v}^\intercal))
+ \end{equation}
+ where $\odot$ represents element-wise matrix multiplication.
+ 
+
+\subsection{Multiple Hidden Layers}
+
+Forward and back propagation should work as usual except for the changes outlined above for using the least-squared-error linear mapping from the last hidden layer to the known labels.
+
+\end{document}  
