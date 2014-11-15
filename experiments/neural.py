@@ -86,12 +86,14 @@ def least_sq_ntwk1(features, labels, initial_wts, **kwargs):
     # get initial hidden layer
     hidden = np.empty((features.shape[0], wts0.shape[1] + 1))
     hidden[:, 0] = 1.0
-    hidden[:, 1:] = sigmoid(features.dot(wts0))
+    sigxw = sigmoid(features.dot(wts0))
+    hidden[:, 1:] = sigxw
     # get optimal wts1 given wts0
     wts1 = np.linalg.pinv(hidden).dot(labels)
+    predicted = hidden.dot(wts1)
     # backprop
     """
-    As of 2014-11-11 something isn't right here. Algorithm isn't converging.
+    First version doesn't work.
     Sample output on nonlinear function using random features:
     error after iteration 1: 0.389115314723
     error after iteration 2: 0.324511537066
@@ -105,13 +107,30 @@ def least_sq_ntwk1(features, labels, initial_wts, **kwargs):
     error after iteration 62: 1.26373950808
     error after iteration 63: 1.26351975815
     error after iteration 64: 1.26328420549
+    New version also doesn't work.
+    Sample output on nonlinear function using random features:
+    error after iteration 1: 2.1928215227
+    ...
+    error after iteration 16: 2.1928215227
+    Usually similar, but another case:
+    error after iteration 1: 0.108232998162
+    error after iteration 2: 1.51657739873
+    ...
+    error after iteration 16: 1.51657739873
     """
+    scalar_mult = 2.0 * eta / features.shape[0] 
     for i in range(maxiter):
-        wts0 -= eta * sigmoid_grad(wts0) * wts1[1:]
-        hidden[:, 1:] = sigmoid(features.dot(wts0))
+        # update wt0
+        wts0 -= scalar_mult * features.transpose().dot(sigxw * \
+                (1 - sigxw) * (np.outer(sigxw.dot(wts1[1:]) - labels, wts1[1:])))
+        # update hidden layer
+        sigxw = sigmoid(features.dot(wts0))
+        hidden[:, 1:] = sigxw
+        # update wts1
         wts1 = np.linalg.pinv(hidden).dot(labels)
-        predicted = least_sq_predict(features, wts0, wts1, hidden=hidden)
-        print "error after iteration {0}: {1}".format(i + 1, ave_sq_error(predicted, labels))
+        # update predictions
+        predicted = hidden.dot(wts1)
+        print "error after iteration {0}: {1}".format(i + 1, mean_sq_error(predicted, labels))
     return wts0, wts1
 
 def least_sq_predict(features, wts0, wts1, **kwargs):
@@ -125,10 +144,13 @@ def least_sq_predict(features, wts0, wts1, **kwargs):
         Note that the values of the matrix passed in for this
         parameter will be overwritten when this function is called.
     """
-    hidden = kwargs.get('hidden', np.ones((features.shape[0], wts0.shape[1] + 1)))
-    hidden[:, 1:] = sigmoid(features.dot(wts0))
+    if 'hidden' in kwargs:
+        hidden = kwargs['hidden']
+    else:
+        hidden = np.ones((features.shape[0], wts0.shape[1] + 1))
+        hidden[:, 1:] = sigmoid(features.dot(wts0))
     return hidden.dot(wts1)
 
-def ave_sq_error(predicted, actual):
+def mean_sq_error(predicted, actual):
     diff = predicted - actual
     return np.mean(diff * diff, axis=0)

@@ -85,11 +85,12 @@ def nonlinear_func1(features):
 
 
 def try_leastsqneural():
+    reload(neural)
     features = np.random.random((21, 4))
     features[:, 0] = 1
     labels = nonlinear_func1(features)
     initial_wts = np.random.random((4, 6))
-    wts0, wts1 = neural.least_sq_ntwk1(features, labels, initial_wts, maxiter=64)
+    wts0, wts1 = neural.least_sq_ntwk1(features, labels, initial_wts, maxiter=16)
 
 if __name__ == '__main__':
     unittest.main()
